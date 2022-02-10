@@ -93,8 +93,8 @@ def _calculate_prey_stats(df: pd.DataFrame, n: int) -> pd.DataFrame:
     """
     # since agg() can only take functions with a single argument, the number of unique
     # baits n needs to be pre-loaded into the calculation.
-    adjusted_mean = partial(mean_, n)
-    adjusted_std = partial(std_, n)
+    adjusted_mean = partial(mean_, n=n)
+    adjusted_std = partial(std_, n=n)
 
     return df.groupby('prey').agg(
         prey_mean=('ave_psm', adjusted_mean),
@@ -103,42 +103,21 @@ def _calculate_prey_stats(df: pd.DataFrame, n: int) -> pd.DataFrame:
     )
 
 
-def z_score(s: pd.Series) -> float:
-    return (s.ave_psm - s.prey_mean) / s.prey_std
+def z_score(df: pd.DataFrame) -> pd.Series:
+    return (df.ave_psm - df.prey_mean) / df.prey_std
 
 
-def s_score(s: pd.Series, n: int) -> float:
-    return math.sqrt((s.ave_psm * n) / s.f_sum)
+def s_score(df: pd.DataFrame, n: int) -> pd.Series:
+    return np.sqrt((df.ave_psm * n) / df.f_sum)
 
 
-def d_score(s: pd.Series, n: int) -> float:
-    return math.sqrt(s.ave_psm * ((n / s.f_sum) ** s.p))
+def d_score(df: pd.DataFrame, n: int) -> pd.Series:
+    return np.sqrt(df.ave_psm * ((n / df.f_sum) ** df.p))
 
 
-def wd_score(s: pd.Series, n: int) -> float:
-    wd_inner = (n / s.f_sum) * (s.prey_std / s.prey_mean)
-    return math.sqrt(s.ave_psm * (wd_inner**s.p))
-
-
-def score_row(row: pd.Series, n: int) -> pd.DataFrame:
-    """Calculates Z, S, D, and WD scores for a given a row with the following columns:
-    'ave_psm', 'p', 'prey_mean', 'prey_std', and 'f_sum'.
-    """
-    z = z_score(row)
-    s = s_score(row, n)
-    d = d_score(row, n)
-    wd = wd_score(row, n)
-
-    return pd.Series(
-        {
-            'ave_psm': row.ave_psm,
-            'z': z,
-            's': s,
-            'd': d,
-            'wd': wd,
-            'entropy': row.entropy,
-        }
-    )
+def wd_score(df: pd.DataFrame, n: int) -> pd.Series:
+    wd_inner = (n / df.f_sum) * (df.prey_std / df.prey_mean)
+    return normalize_wd(np.sqrt(df.ave_psm * (wd_inner**df.p)))
 
 
 def normalize_wd(s: pd.Series, normalization_factor=0.98) -> pd.Series:
@@ -146,6 +125,18 @@ def normalize_wd(s: pd.Series, normalization_factor=0.98) -> pd.Series:
     scores are >1."""
     normalization_value = s.loc[s > 0].quantile(normalization_factor)
     return s / normalization_value
+
+
+def _calculate_scores(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """Calculates Z, S, D, and WD scores from a DataFrame with the following columns:
+    'ave_psm', 'p', 'prey_mean', 'prey_std', and 'f_sum'.
+    """
+    return df.assign(
+        z=z_score,
+        s=partial(s_score, n=n),
+        d=partial(d_score, n=n),
+        wd=partial(wd_score, n=n),
+    )
 
 
 def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
@@ -170,10 +161,6 @@ def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
     prey_stats = _calculate_prey_stats(psm_stats, n)
     stats_table = psm_stats.join(prey_stats)
 
-    result = (
-        stats_table.apply(score_row, n, axis='columns')
-        .assign(wd=lambda x: normalize_wd(x.wd))
-        .reset_index()
-    )
+    result = stats_table.pipe(_calculate_scores).reset_index()
 
-    return result
+    return result[['bait', 'prey', 'ave_psm', 'z', 'wd', 'entropy']]
