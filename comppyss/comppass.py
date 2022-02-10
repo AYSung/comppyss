@@ -1,3 +1,11 @@
+"""
+CompPySS
+Python implementation of the Comparative Proteomic Analysis Software Suite (CompPASS)
+developed by Dr. Mathew Sowa for defining the human deubiquitinating enzyme interaction
+landscape (Sowa, Mathew E., et al 2009). Based on the R packages CRomppass (David 
+Nusinow)and SMAD (Qingzhou Zhang).
+"""
+
 from functools import partial
 import math
 
@@ -5,12 +13,25 @@ import numpy as np
 import pandas as pd
 
 
+def _agg_max_spectral_count(df: pd.DataFrame) -> pd.DataFrame:
+    return df.groupby(['prey', 'bait', 'replicate']).agg('max')
+
+
 def entropy(s: pd.Series) -> float:
+    """Calculates the Shannon entropy for a list of values. To avoid taking the log of
+    zero, a fractional pseudocount of 1/(# of values) is added to each value.
+    """
     p = (s + (1 / len(s))) / (s.sum() + 1)
     return sum(-p * np.log2(p))
 
 
 def _calculate_aggregate_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculates the following aggregate statistics from an input dataframe:
+
+    ave_psm: mean of the PSM values for each bait-prey pair across replicates.
+    p: number of replicates in which each bait-prey pair was detected.
+    entropy: Shannon entropy across the replicates
+    """
     return df.groupby(['bait', 'prey']).agg(
         ave_psm=('spectral_count', 'mean'),
         p=('spectral_count', 'count'),
@@ -94,8 +115,9 @@ def normalize_wd(s: pd.Series, normalization_factor=0.98) -> pd.Series:
 def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
     k = input_df.bait.nunique()
 
-    psm_stats = input_df.set_index(['bait', 'prey']).pipe(_calculate_aggregate_stats)
-    prey_stats = psm_stats.pipe(_calculate_prey_stats, k=k)
+    input_df = input_df.set_index(['bait', 'prey']).pipe(_agg_max_spectral_count)
+    psm_stats = _calculate_aggregate_stats(input_df)
+    prey_stats = _calculate_prey_stats(psm_stats, k=k)
     stats_table = psm_stats.join(prey_stats)
 
     result = (
@@ -104,4 +126,4 @@ def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
-    return result[['bait', 'prey', 'ave_psm', 'z', 'wd', 'entropy']]
+    return result
