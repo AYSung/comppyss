@@ -1,1 +1,0 @@
-from comppass import comppass
