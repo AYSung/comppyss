@@ -2,8 +2,8 @@
 CompPySS
 Python implementation of the Comparative Proteomic Analysis Software Suite (CompPASS)
 developed by Dr. Mathew Sowa for defining the human deubiquitinating enzyme interaction
-landscape (Sowa, Mathew E., et al 2009). Based on the R packages CRomppass (David
-Nusinow)and SMAD (Qingzhou Zhang).
+landscape (Sowa, Mathew E., et al 2009). Based on the R packages cRomppass (David
+Nusinow) and SMAD (Qingzhou Zhang).
 """
 
 from functools import partial
