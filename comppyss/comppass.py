@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 
-def _preprocess(df: pd.DataFrame) -> pd.DataFrame:
+def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     """Sets DataFrame index, drops rows with spectral_count of 0, and only keep the
     maximum spectral count for bait-prey pairs if there are duplicates within a given
     replicate.
@@ -34,7 +34,7 @@ def entropy(s: pd.Series) -> float:
     return sum(-p * np.log2(p))
 
 
-def _calculate_aggregate_stats(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_aggregate_stats(df: pd.DataFrame) -> pd.DataFrame:
     """Calculates the following aggregate statistics from an input dataframe:
 
     ave_psm: mean of the PSM values for each bait-prey pair across replicates.
@@ -51,11 +51,11 @@ def _calculate_aggregate_stats(df: pd.DataFrame) -> pd.DataFrame:
 def mean_(s: pd.Series, n: int) -> float:
     """Calculates the mean of a series. Denominator is the total number of unique baits,
     so ave_psm for bait-prey pairs that were not detected are counted as zeroes."""
-    is_bait = s.index.get_level_values('bait') == s.index.get_level_values('prey')
+    is_bait = prey_equals_bait(s)
     return s.loc[~is_bait].sum() / n
 
 
-def _extend_series_with_zeroes(s: pd.Series, n: int) -> pd.Series:
+def extend_series_with_zeroes(s: pd.Series, n: int) -> pd.Series:
     """Extends Series to n elements by filling in missing elements with zero values.
     'prey' level of the multindex is preserved. This is used for calculating the
     standard deviation.
@@ -70,20 +70,20 @@ def std_(s: pd.Series, n: int) -> float:
     not detected are set to 0 for the standard deviation calculation. Excludes values
     where the bait and the prey are the same.
     """
-    s = _extend_series_with_zeroes(s, n)
-    is_bait = _prey_equals_bait(s)
+    s = extend_series_with_zeroes(s, n)
+    is_bait = prey_equals_bait(s)
     mean = s.loc[~is_bait].sum() / n
     return math.sqrt(sum((s.loc[~is_bait] - mean) ** 2) / (n - 1))
 
 
-def _prey_equals_bait(s: pd.Series) -> np.ndarray:
+def prey_equals_bait(s: pd.Series) -> np.ndarray:
     """Return an indexer for elements of a series where the prey is the same as the
     bait.
     """
     return s.index.get_level_values('bait') == s.index.get_level_values('prey')
 
 
-def _calculate_prey_stats(df: pd.DataFrame, n: int) -> pd.DataFrame:
+def calculate_prey_stats(df: pd.DataFrame, n: int) -> pd.DataFrame:
     """Calculate the following statistics for each prey in the dataset:
 
     prey_mean: mean of the ave_psm, see mean_ function documentation for details.
@@ -156,9 +156,9 @@ def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
     # n: number of unique baits in the dataset
     n = input_df.bait.nunique()
 
-    input_df = _preprocess(input_df)
-    psm_stats = _calculate_aggregate_stats(input_df)
-    prey_stats = _calculate_prey_stats(psm_stats, n)
+    input_df = preprocess(input_df)
+    psm_stats = calculate_aggregate_stats(input_df)
+    prey_stats = calculate_prey_stats(psm_stats, n)
     stats_table = psm_stats.join(prey_stats)
 
     result = stats_table.pipe(_calculate_scores).reset_index()
