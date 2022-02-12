@@ -117,7 +117,7 @@ def d_score(df: pd.DataFrame, n: int) -> pd.Series:
 
 def wd_score(df: pd.DataFrame, n: int) -> pd.Series:
     wd_inner = (n / df.f_sum) * (df.prey_std / df.prey_mean)
-    return normalize_wd(np.sqrt(df.ave_psm * (wd_inner**df.p)))
+    return np.sqrt(df.ave_psm * (wd_inner**df.p))
 
 
 def normalize_wd(s: pd.Series, normalization_factor=0.98) -> pd.Series:
@@ -139,14 +139,19 @@ def _calculate_scores(df: pd.DataFrame, n: int) -> pd.DataFrame:
     )
 
 
-def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
+def comppass(input_df: pd.DataFrame, normalization_factor=0.98) -> pd.DataFrame:
     """Perform CompPASS analysis on input DataFrame. Input DataFrame must have the
     following columns:
 
-    'prey': gene name or other identifier for each bait.
-    'bait': gene name or other identifier for each bait.
-    'replicate': id for replicates of a single bait (e.g. 1, 2, 3 or A, B, C)
-    'spectral_count': peptide spectral matches for each bait-prey pair.
+    Parameters:
+    -----------
+        input_df (DataFrame): Pandas DataFrame with the following columns:
+            'prey': gene name or other identifier for each bait.
+            'bait': gene name or other identifier for each bait.
+            'replicate': id for replicates of a single bait (e.g. 1, 2, 3 or A, B, C)
+            'spectral_count': peptide spectral matches for each bait-prey pair.
+        normalize (float | bool): Value between 0 and 1 for normalizing wd score to a
+            given percentile (default 0.98). Specifying False prevents normalization.
 
     NOTE: Both the prey and bait columns should use the same system of identifiers
     in order to be able to properly handle instances where the bait and the prey
@@ -161,6 +166,8 @@ def comppass(input_df: pd.DataFrame) -> pd.DataFrame:
     prey_stats = calculate_prey_stats(psm_stats, n)
     stats_table = psm_stats.join(prey_stats)
 
-    result = stats_table.pipe(_calculate_scores).reset_index()
+    result = _calculate_scores(stats_table, n).reset_index()
+    if normalization_factor:
+        result = result.assign(wd=normalize_wd(result.wd, normalization_factor))
 
     return result[['bait', 'prey', 'ave_psm', 'z', 'wd', 'entropy']]
