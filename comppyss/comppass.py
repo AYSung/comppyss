@@ -62,7 +62,8 @@ def extend_series_with_zeroes(s: pd.Series, n: int) -> pd.Series:
     """
     prey = s.index.get_level_values('prey')[0]
     n_to_extend = n - len(s)
-    return s.append(pd.Series(0, index=((prey, None) for _ in range(n_to_extend))))
+    extension = pd.Series(0, index=((prey, None) for _ in range(n_to_extend)))
+    return pd.concat([s, extension])
 
 
 def std_(s: pd.Series, n: int) -> float:
@@ -139,7 +140,9 @@ def _calculate_scores(df: pd.DataFrame, n: int) -> pd.DataFrame:
     )
 
 
-def comppass(input_df: pd.DataFrame, normalization_factor=0.98) -> pd.DataFrame:
+def comppass(
+    input_df: pd.DataFrame, normalization_factor: float | None = 0.98
+) -> pd.DataFrame:
     """Perform CompPASS analysis on input DataFrame. Input DataFrame must have the
     following columns:
 
@@ -151,7 +154,7 @@ def comppass(input_df: pd.DataFrame, normalization_factor=0.98) -> pd.DataFrame:
             'replicate': id for replicates of a single bait (e.g. 1, 2, 3 or A, B, C)
             'spectral_count': peptide spectral matches for each bait-prey pair.
         normalize (float | bool): Value between 0 and 1 for normalizing wd score to a
-            given percentile (default 0.98). Specifying False prevents normalization.
+            given percentile (default 0.98). Specifying None prevents normalization.
 
     NOTE: Both the prey and bait columns should use the same system of identifiers
     in order to be able to properly handle instances where the bait and the prey
@@ -167,7 +170,7 @@ def comppass(input_df: pd.DataFrame, normalization_factor=0.98) -> pd.DataFrame:
     stats_table = psm_stats.join(prey_stats)
 
     result = _calculate_scores(stats_table, n).reset_index()
-    if normalization_factor:
+    if normalization_factor is not None:
         result = result.assign(wd=normalize_wd(result.wd, normalization_factor))
 
     return result[['bait', 'prey', 'ave_psm', 'z', 'wd', 'entropy']]
